@@ -1,0 +1,8 @@
+# Versions exercised in the packaging checks. Uvicorn uses its pure Python
+# HTTP server; optional compiled performance extras are not needed here.
+fastapi==0.143.0
+uvicorn==0.54.0
+pydantic==2.14.1
+requests==2.34.2
+websocket-client==1.9.2
+python-multipart==0.0.32

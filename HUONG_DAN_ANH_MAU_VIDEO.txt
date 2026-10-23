@@ -1,0 +1,12 @@
+Bản sửa ảnh mẫu video 13/10/2026
+
+Khởi động lại bằng 02_CHAY_MUSE2API.bat, làm mới trang bằng Ctrl+F5.
+Trong Tạo hàng loạt chọn Tạo video, hoặc mở Dùng thử > Tạo video thử.
+Chọn một hoặc nhiều ảnh PNG/JPG/WEBP cùng lúc. Tối đa 8 ảnh, 5 MB/ảnh, tổng 20 MB.
+Ảnh có xem trước, chọn vai trò Nhân vật/Bối cảnh/Nền/Khung hình đầu/Tham khảo chung và bỏ từng ảnh.
+Ví dụ prompt: Dùng nhân vật ở ảnh 1, đặt trong bối cảnh ảnh 2, nhân vật bước tới máy quay.
+Trong batch, cùng bộ ảnh được gửi cho mọi prompt trong lô; mỗi bộ ảnh khác nhau cần lô riêng.
+API mới: reference_images là danh sách ảnh data URL; reference_roles cùng số phần tử, giá trị character/scene/background/first_frame/reference. Trường reference_image cũ vẫn hoạt động.
+Video mặc định 10 giây, thời lượng cho phép 1-10 giây. Thời lượng kết quả thực tế do Muse quyết định.
+Liên kết batch#settings dư đã bỏ; cài đặt tải tự động vẫn ở batch.
+Đã kiểm tra API/queue với media mẫu, widget và gửi đủ nhiều ảnh trong Chrome headless riêng. Chưa xác nhận tạo video thật theo nhiều ảnh trên Muse.

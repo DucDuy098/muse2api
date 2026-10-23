@@ -1,0 +1,54 @@
+{
+  "frozen": true,
+  "tabs": 7,
+  "health": {
+    "status": "ok",
+    "time": 1792479616,
+    "desktop_revision": 3,
+    "features": [
+      "telegram-settings",
+      "batch",
+      "multi-image",
+      "account-workflows",
+      "document-references"
+    ]
+  },
+  "telegram_settings": {
+    "enabled": false,
+    "user_ids": [],
+    "send_original": true,
+    "token_set": false,
+    "running": false,
+    "connected": false,
+    "username": "",
+    "error": "",
+    "busy_users": 0
+  },
+  "admin_served": true,
+  "video_duration_ms": 10000,
+  "video_position_ms": 333,
+  "ports_released": true,
+  "task_tools_routes": true,
+  "report_filter": true,
+  "auth": true,
+  "frozen_source_match": true,
+  "live_muse_tested": false,
+  "clean_windows_tested": false,
+  "account_workflows": {
+    "parallel_accounts": 2,
+    "ordered_prompts_per_account": 100,
+    "same_account_exclusive": true,
+    "selected_account_retries": true,
+    "automatic_batch_retry_pins_actual_account": true,
+    "failed_batch_clone_to_other_account": true,
+    "chat_account_selection": true,
+    "sequence_account_selection": true,
+    "per_account_media_folders": true,
+    "per_account_downloads": true,
+    "named_document_upload_chromium": true,
+    "chromium_cookie_isolation": true,
+    "web_account_controls": true,
+    "qt_account_controls": true
+  },
+  "signed": false
+}

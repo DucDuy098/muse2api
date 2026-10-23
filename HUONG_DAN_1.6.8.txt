@@ -1,0 +1,56 @@
+MUSE2API 1.6.8 — CHỌN TÀI KHOẢN, NHIỀU HÀNG ĐỢI SONG SONG
+
+CẬP NHẬT
+Dừng các lô đang chạy, dừng dịch vụ và đóng GUI/CMD cũ trước khi chép bản cập nhật.
+Giải nén ZIP cập nhật vào thư mục portable 1.6.7, chép đè; giữ nguyên .env và data.
+Không chỉ chép riêng EXE; cần các HTML/JS và _internal đi cùng.
+Khởi động lại, tải lại trang web (Ctrl+F5). Health desktop_revision mới = 3.
+
+1. CHỌN TÀI KHOẢN
+Thêm cookie và đặt tên ở Tài khoản. Mục Tạo ảnh/video, Excel/TXT và Chat đều có bộ chọn.
+Tự động chọn giữ cơ chế pool cũ. Chọn cụ thể thì yêu cầu chỉ dùng tài khoản đó, không tự chuyển khi lỗi.
+Tài khoản bị tắt/xóa/chưa có cookie không được nhận lô mới.
+Chuỗi đồng bộ và chat giữ nguyên tài khoản/hội thoại. Không thể đổi tài khoản trong một hội thoại có sẵn.
+GUI giữ chat và chuỗi riêng cho từng tài khoản; đổi bộ chọn để chuyển sang phần của tài khoản đó.
+Web: đổi tài khoản chat sẽ tạo hội thoại mới. Hội thoại cũ vẫn ở danh sách để mở lại.
+
+2. MỖI TÀI KHOẢN MỘT LÔ, CÁC TÀI KHOẢN CHẠY SONG SONG
+Ở Excel/TXT: chọn tài khoản A, nhập 100 prompt, bấm Chạy danh sách.
+Tiếp đó chọn B, nhập danh sách của B (có thể giống hoặc khác), bấm Chạy danh sách.
+A chạy lần lượt A1…A100, B chạy lần lượt B1…B100 song song độc lập với A.
+Mỗi lô chọn tài khoản có concurrency=1; tối đa 500 prompt/lô. Có thể thêm C, D… tương tự.
+Không nhận lô thứ hai trên cùng tài khoản khi lô cũ còn prompt chờ/đang chạy, kể cả lô tạm dừng.
+Tạm dừng/Tiếp tục/Dừng chỉ áp dụng lô đang chọn. Chuỗi đồng bộ tự tạm dừng khi có cảnh lỗi.
+Khả năng chạy thực tế phụ thuộc tài nguyên máy và dịch vụ Muse. Không đặt một tổng giới hạn 1 khi có nhiều tài khoản: số slot tối thiểu tự tăng theo số tài khoản đang bật.
+
+3. NHẬT KÝ VÀ TẠO LẠI
+Nhật ký GUI có danh sách tác vụ và bộ lọc tài khoản, tách khỏi phần log dịch vụ.
+Thư viện có danh sách tác vụ theo tài khoản; web có bộ lọc Tác vụ.
+Tạo lại mặc định sử dụng tài khoản thực sự đã chạy tác vụ lỗi (kể cả yêu cầu gốc là Tự động).
+Nếu tài khoản gốc không khả dụng, hệ thống yêu cầu chọn tài khoản khác, không âm thầm đổi.
+Tạo riêng/tài khoản khác: chọn tài khoản đích, tạo độc lập trong hội thoại mới.
+Prompt lỗi thuộc lô: dùng Tạo lại prompt lỗi tại Excel/TXT để giữ thứ tự/cùng chuỗi.
+Nút Lỗi → tài khoản khác tạo lô độc lập mới chỉ gồm các prompt lỗi, không chạy lại các prompt đã xong.
+
+4. THƯ VIỆN VÀ THƯ MỤC
+Chọn Thư mục tài khoản trong Thư viện để xem kết quả riêng của A/B…
+Tệp cũng được phân nhóm dưới data/media/accounts/<account_id>/.
+Nút Mở thư mục trong GUI mở đúng thư mục tài khoản đang chọn.
+Giữ tệp gốc tại data/media để URL/tác vụ cũ còn dùng được. Thư mục tài khoản sử dụng hard link khi hệ thống hỗ trợ, nếu không sẽ sao chép.
+Tải tự động phân nhóm dưới <thư mục tải>/accounts/<account_id>/video_001.mp4…
+Các tệp cũ xác định được tài khoản qua lịch sử sẽ được phân nhóm khi làm mới thư viện. Không đoán tài khoản cho tệp thiếu lịch sử; chúng nằm ở Chưa phân loại.
+Báo cáo tác vụ có cột account/account_id.
+
+5. ẢNH VÀ TÀI LIỆU THAM CHIẾU
+Nút Thêm ảnh/tài liệu nhận PNG/JPG/WEBP và MD/TXT/CSV/XLSX/XLS/PDF/DOCX.
+Tối đa 8 ảnh và 8 tài liệu; mỗi tệp 5 MB, tổng ảnh 20 MB và tổng tài liệu 20 MB. Văn bản MD/TXT/CSV cần UTF-8.
+Tài liệu được đính kèm nguyên tệp cho Muse, không dùng như danh sách prompt và không thực thi trên máy.
+Muốn nhập danh sách prompt từ Excel/TXT, dùng nút Nhập Excel/TXT ở phía trên.
+Độc lập: đính kèm lại mỗi prompt. Đồng bộ: chỉ gửi cả bộ tệp một lần ở đầu hội thoại, quy ước chung vẫn gửi mỗi cảnh.
+Muốn đổi bộ tệp trong chuỗi: bấm Chuỗi mới hoặc tạo lô mới.
+Muse phải xác nhận đủ tệp trước khi gửi prompt; nếu dịch vụ không nhận một định dạng, tác vụ dừng với lỗi, không bỏ qua âm thầm.
+Việc Muse phân tích được tài liệu/đồng bộ nhân vật cần bạn xác nhận qua lần thử thực tế.
+
+KIỂM CHỨNG
+Có kiểm thử tự động bằng tài khoản và API giả, gồm 2 tài khoản x 100 prompt, thứ tự, chạy song song, chat/chuỗi cố định, tạo lại và nhóm thư viện.
+Có kiểm tra GUI/Chromium cục bộ. Không dùng cookie thật và không tạo ảnh/video tính phí trong các kiểm thử này.

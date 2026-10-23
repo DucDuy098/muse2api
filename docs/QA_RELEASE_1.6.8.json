@@ -1,0 +1,33 @@
+{
+  "version": "1.6.8",
+  "clean_zip_verified": true,
+  "patch_files": 30,
+  "patch_applied_to_1.6.7": true,
+  "existing_config_data_preserved": true,
+  "patch_gui_media_api_self_test": true,
+  "live_muse_tested": false,
+  "clean_windows_tested": false,
+  "account_scheduling": {
+    "parallel_accounts": 2,
+    "ordered_prompts_each": 100,
+    "same_account_concurrency": 1,
+    "account_retries_and_clone": true,
+    "chat_and_sequence_pinned": true,
+    "document_refs_once": true,
+    "account_library_and_download_folders": true,
+    "real_chromium_cookie_isolation": true,
+    "gui_and_web_account_controls": true
+  },
+  "archives": [
+    {
+      "file": "Muse2API_VI_Portable_1.6.8.zip",
+      "bytes": 67103578,
+      "sha256": "26ca5dfca98db957008376d1f708bc5a62b20d4b1c4083a78fcca499f5591af5"
+    },
+    {
+      "file": "Muse2API_Update_1.6.7_to_1.6.8.zip",
+      "bytes": 7566489,
+      "sha256": "94a002ab89ddd3c88a5d8e9c6af2d9bb5d3f0129853d67f4c310ddc70f1da03d"
+    }
+  ]
+}
