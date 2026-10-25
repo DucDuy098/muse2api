@@ -42,6 +42,7 @@ from fastapi import Body, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
                                Response, StreamingResponse)
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from config import CFG
@@ -57,7 +58,9 @@ if not log.handlers:
     log.addHandler(_h)
 
 CFG.ensure_dirs()
-app = FastAPI(title="muse2api", version="1.6.8")
+# docs_url/redoc_url off: the frontend owns /docs (its own human-written API
+# guide, see app/docs/page.tsx) — Swagger would otherwise shadow that route.
+app = FastAPI(title="muse2api", version="1.6.8", docs_url=None, redoc_url=None)
 
 # Cookie 助手脚本从 muse.ai 页面发起导入请求，需要放行该来源；
 # 浏览器扩展从 chrome-extension:// 发起，也一并放行。
@@ -2028,28 +2031,6 @@ def delete_single_media(name: str, _=Depends(webauth.require_role("member"))):
         raise HTTPException(500, f"删除失败: {e}")
 
 
-# ------------------------- 前端页面 -------------------------
-def _admin_html() -> str:
-    p = os.path.join(BASE_DIR, "admin.html")
-    try:
-        with open(p, encoding="utf-8") as f:
-            return f.read()
-    except OSError:
-        return ("<!doctype html><meta charset=utf-8><body style='background:#0b0f19;"
-                "color:#e6e8ee;font-family:system-ui;padding:40px'>"
-                "<h2>muse2api</h2><p>管理页面文件 admin.html 缺失。</p>"
-                "<p>接口可用：<code>/v1/images/generations</code>、"
-                "<code>/v1/videos</code></p></body>")
-
-
-@app.get("/", response_class=HTMLResponse)
-def index():
-    return _admin_html()
-
-
-@app.get("/admin", response_class=HTMLResponse)
-def admin_page():
-    return _admin_html()
 
 
 
@@ -2599,3 +2580,57 @@ _install_generation_sequence(globals())
 
 from task_tools import install as _install_task_tools
 _install_task_tools(globals())
+
+
+# ------------------------- 前端静态页面（Next.js static export） -------------------------
+# No separate Nginx/Traefik static site here — Coolify gives this process one
+# container behind Traefik, so the same FastAPI app also serves
+# frontend/out/. Mirrors the `try_files $uri $uri.html $uri/index.html`
+# logic from deploy/nginx.conf for environments that DO put Nginx in front.
+#
+# Registered dead last: Starlette matches routes in registration order, not
+# by specificity, and this is a catch-all (`/{path:path}`) — anything
+# registered after it (including the install(globals()) calls above, which
+# add their own routes) would be shadowed and become unreachable.
+FRONTEND_DIR = os.path.join(BASE_DIR, "frontend", "out")
+_NO_FRONTEND_HTML = (
+    "<!doctype html><meta charset=utf-8><body style='background:#0b0f19;"
+    "color:#e6e8ee;font-family:system-ui;padding:40px'>"
+    "<h2>muse2api</h2><p>Frontend chưa build (frontend/out thiếu). "
+    "Chạy <code>cd frontend && npm run build</code>.</p>"
+    "<p>API vẫn dùng được: <code>/v1/images/generations</code>、"
+    "<code>/v1/videos</code></p></body>")
+
+if os.path.isdir(os.path.join(FRONTEND_DIR, "_next")):
+    app.mount("/_next", StaticFiles(directory=os.path.join(FRONTEND_DIR, "_next")), name="next-static")
+
+
+def _resolve_static(path: str) -> str | None:
+    """path has no leading slash. Tries, in order: exact file, path.html,
+    path/index.html — same precedence as Next.js static export routing."""
+    candidates = [path, path + ".html", os.path.join(path, "index.html")] if path else ["index.html"]
+    for rel in candidates:
+        full = os.path.normpath(os.path.join(FRONTEND_DIR, rel))
+        if not full.startswith(os.path.normpath(FRONTEND_DIR)):
+            continue  # path traversal guard
+        if os.path.isfile(full):
+            return full
+    return None
+
+
+_RESERVED_PREFIXES = ("v1", "admin", "auth", "healthz", "readyz", "_next", "openapi.json")
+
+
+@app.get("/{path:path}")
+def serve_frontend(path: str):
+    if not os.path.isdir(FRONTEND_DIR):
+        return HTMLResponse(_NO_FRONTEND_HTML)
+    first_segment = path.split("/", 1)[0]
+    if first_segment in _RESERVED_PREFIXES:
+        raise HTTPException(404)
+    full = _resolve_static(path)
+    if full is None:
+        full = _resolve_static("404")  # Next's generated 404.html
+        if full is None:
+            raise HTTPException(404)
+    return FileResponse(full)
