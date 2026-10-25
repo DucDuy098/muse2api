@@ -17,6 +17,7 @@ import uuid
 
 import requests
 
+from config import CFG
 from video_references import validate_references, ROLES
 
 
@@ -130,6 +131,25 @@ class TelegramAPI:
         except requests.RequestException:
             raise RuntimeError('Không tải được ảnh mẫu từ Telegram') from None
         return 'data:' + mime + ';base64,' + base64.b64encode(data).decode('ascii')
+
+
+def send_alert(text: str) -> None:
+    """One-off notification (account/cookie expiry etc.) — reuses the same
+    bot/chat config as normal generation delivery, no separate alert channel.
+    Silently no-ops if Telegram isn't configured; never raises into callers
+    like the keepalive loop."""
+    try:
+        settings = TelegramSettings(CFG.data_dir).read()
+        if not settings.get('enabled') or not settings.get('token') or not settings.get('user_ids'):
+            return
+        api = TelegramAPI(settings['token'])
+        for uid in settings['user_ids']:
+            try:
+                api.call('sendMessage', {'chat_id': uid, 'text': text})
+            except Exception:  # noqa: BLE001
+                pass
+    except Exception:  # noqa: BLE001
+        pass
 
 
 MENU = {'keyboard': [['🖼 Tạo ảnh', '🎬 Tạo video', '💬 Chat Muse'],
@@ -512,6 +532,21 @@ def install(g):
 
     @app.post('/v1/telegram/settings')
     async def configure(request: Request, _=Depends(auth)):
+        try:
+            return await asyncio.to_thread(controller.update, await request.json())
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(400, str(exc))
+
+    # Team-RBAC wrappers for the Next.js web UI. Token/user-id config is
+    # sensitive, so this needs admin (not just member).
+    webauth = g['webauth']
+
+    @app.get('/admin/telegram/settings')
+    def admin_telegram_settings(user=Depends(webauth.require_role('admin'))):
+        return controller.status()
+
+    @app.post('/admin/telegram/settings')
+    async def admin_telegram_configure(request: Request, user=Depends(webauth.require_role('admin'))):
         try:
             return await asyncio.to_thread(controller.update, await request.json())
         except (ValueError, RuntimeError) as exc:

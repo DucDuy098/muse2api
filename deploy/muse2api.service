@@ -1,0 +1,33 @@
+# Muse2API Studio — systemd unit for the FastAPI backend.
+#
+# Install:
+#   sudo cp deploy/muse2api.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now muse2api
+#
+# Assumes the repo is deployed to /opt/muse2api with a venv at
+# /opt/muse2api/.venv (requirements.txt only — requirements-gui.txt/PySide6
+# is never installed on the VPS, it's desktop-only).
+
+[Unit]
+Description=Muse2API Studio (FastAPI backend)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=muse2api
+Group=muse2api
+WorkingDirectory=/opt/muse2api
+EnvironmentFile=/opt/muse2api/.env
+ExecStart=/opt/muse2api/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 18610
+Restart=on-failure
+RestartSec=3
+
+# Headless Chromium + the app itself; keep it off the public interface —
+# Nginx (deploy/nginx.conf) is the only thing that should face the internet.
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

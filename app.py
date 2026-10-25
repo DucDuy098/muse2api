@@ -68,15 +68,45 @@ app = FastAPI(title="muse2api", version="1.6.8")
 _origins = [o.strip() for o in (CFG.cors_origins or "").split(",") if o.strip()]
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
+# allow_credentials only turns on when MUSE2API_CORS_ORIGINS names specific
+# origins: the browser rejects credentials+wildcard outright, and serving
+# Access-Control-Allow-Credentials next to Allow-Origin:* would be the unsafe
+# combination this guards against. With a real origin list (e.g. a frontend
+# on a different host/port than the API) credentials are the whole point —
+# that's how the session cookie (webauth.py) reaches /auth/* and /admin/*.
 app.add_middleware(CORSMiddleware,
-                   allow_origins=["*"],
+                   allow_origins=_origins or ["*"],
+                   allow_credentials=bool(_origins),
                    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
                    allow_headers=["*"],
                    expose_headers=["*"],
                    max_age=600)
 
+# Team web UI auth (session cookie + RBAC). Existing /admin/* routes below
+# still use Depends(auth) (bearer key) for now — flipped to require_role()
+# in a later pass once the Next.js frontend replaces admin.html.
+import db
+import telegram_bot
+import webauth
+import webroutes as _webroutes
+app.include_router(_webroutes.router)
+
 store = Store(CFG)
 engine = MuseEngine(CFG)
+
+import task_events
+
+
+def _task_update(tid: str, **kw):
+    """store.update_task + push the new state to any SSE subscribers
+    (GET /admin/tasks/{id}/stream). Runs from worker threads, so the bus
+    hops onto the asyncio loop via call_soon_threadsafe internally."""
+    t = store.update_task(tid, **kw)
+    if t:
+        task_events.TASK_BUS.publish_threadsafe(
+            tid, {"status": t.get("status"), "progress": t.get("progress"), "error": t.get("error"),
+                 "url": t.get("url")})
+    return t
 
 
 class ConcurrencyLock:
@@ -127,7 +157,7 @@ class AccountPoolManager:
 
     def acquire(self, account_id: str | None = None, preferred_id: str | None = None,
                 rotate: bool = True, force_rotate: bool = False,
-                timeout: float = 60.0) -> dict:
+                timeout: float = 60.0, provider: str | None = None) -> dict:
         deadline = time.monotonic() + timeout
         with self.cond:
             while True:
@@ -148,7 +178,8 @@ class AccountPoolManager:
                         preferred_id=pref,
                         rotate=rotate,
                         force_rotate=force_rotate,
-                        exclude_ids=self.busy_accounts
+                        exclude_ids=self.busy_accounts,
+                        provider=provider
                     )
                     if acc:
                         self.busy_accounts.add(acc["id"])
@@ -984,8 +1015,10 @@ def _queue_image(req: ImageRequest, prompt: str, reference_image: str | list[str
             raise HTTPException(429, "Image queue is full; retry later")
         task = store.create_task("image", req.prompt)
         tid = task["id"]
+        db.audit_threadsafe("task_submit", None, target=tid,
+                            detail={"kind": "image", "prompt_len": len(req.prompt or "")})
         globals().get("_remember_generation_request",lambda *a:None)(tid,req)
-        store.update_task(tid, account=req.account_id, requested_account=req.account_id, api_prompt=prompt, size=req.size,
+        _task_update(tid, account=req.account_id, requested_account=req.account_id, api_prompt=prompt, size=req.size,
                           response_format=req.response_format, progress=0,
                           image_request_key=key_hash, image_request_hash=request_hash, generation_mode=req.generation_mode, sequence_id=req.sequence_id)
 
@@ -993,21 +1026,21 @@ def _queue_image(req: ImageRequest, prompt: str, reference_image: str | list[str
         timing = {"t0": time.time()}
         def _on_acquired():
             timing["t0"] = time.time()
-            store.update_task(tid, status="processing", progress=5)
+            _task_update(tid, status="processing", progress=5)
         try:
             res, acc_id = _run_generation(
                 prompt, "image", req.timeout or CFG.image_timeout, account_id=req.account_id,
-                on_account=lambda aid: store.update_task(tid, account=aid), reference_image=reference_image,
-                on_progress=lambda p: store.update_task(tid, progress=p),
+                on_account=lambda aid: _task_update(tid, account=aid), reference_image=reference_image,
+                on_progress=lambda p: _task_update(tid, progress=p),
                 on_acquired=_on_acquired, generation_mode=req.generation_mode, sequence_id=req.sequence_id)
             # Store only media metadata, not large base64 payloads or reference credentials.
-            store.update_task(tid, status="completed", progress=100, account=acc_id,
+            _task_update(tid, status="completed", progress=100, account=acc_id,
                               elapsed=round(time.time() - timing["t0"], 1),
                               url=media_url(res["filename"]),
                               result={**{k: res[k] for k in ("filename", "size", "kind")},
                                       "url": media_url(res["filename"])})
         except Exception as exc:  # noqa: BLE001
-            store.update_task(tid, status="failed", error=str(exc),
+            _task_update(tid, status="failed", error=str(exc),
                               elapsed=round(time.time() - timing["t0"], 1))
 
     threading.Thread(target=worker, daemon=True).start()
@@ -1027,6 +1060,16 @@ def create_image_task(req: ImageRequest,
         ref_img = first.get("image_url") or first.get("url") if isinstance(first, dict) else first
     ref_img = prepare_references(req, ref_img)
     return _queue_image(req, build_image_prompt(req), ref_img, idempotency_key)
+
+
+@app.post("/admin/generate/image")
+def admin_generate_image(req: ImageRequest,
+                         idempotency_key: str | None = Header(default=None),
+                         user=Depends(webauth.require_role("member"))):
+    """Same logic as POST /v1/images/tasks, gated by team RBAC instead of the
+    bearer key — lets the web UI (session login) submit generations without
+    handing every member the master API key."""
+    return create_image_task(req, idempotency_key)
 
 
 @app.get("/v1/images/tasks/{task_id}")
@@ -1171,23 +1214,25 @@ async def create_video(req: VideoRequest, _=Depends(auth)):
     prompt = build_video_prompt(req)
     timeout = req.timeout or CFG.video_timeout
     task = store.create_task("video", req.prompt)
+    db.audit_threadsafe("task_submit", None, target=task["id"],
+                        detail={"kind": "video", "prompt_len": len(req.prompt or "")})
     globals().get("_remember_generation_request",lambda *a:None)(task["id"],req)
-    store.update_task(task["id"], account=req.account_id, requested_account=req.account_id, api_prompt=prompt, generation_mode=req.generation_mode, sequence_id=req.sequence_id)
+    _task_update(task["id"], account=req.account_id, requested_account=req.account_id, api_prompt=prompt, generation_mode=req.generation_mode, sequence_id=req.sequence_id)
 
-    store.update_task(task["id"], progress=10)
+    _task_update(task["id"], progress=10)
 
     def worker():
         timing = {"t0": time.time()}
         def _on_acquired():
             timing["t0"] = time.time()
-            store.update_task(task["id"], status="processing", progress=15)
+            _task_update(task["id"], status="processing", progress=15)
         try:
             def prog_cb(p):
-                store.update_task(task["id"], progress=p)
-            res, acc_id = _run_generation(prompt, "video", timeout, account_id=req.account_id, on_account=lambda aid: store.update_task(task["id"], account=aid), on_progress=prog_cb,
+                _task_update(task["id"], progress=p)
+            res, acc_id = _run_generation(prompt, "video", timeout, account_id=req.account_id, on_account=lambda aid: _task_update(task["id"], account=aid), on_progress=prog_cb,
                                           reference_image=ref_img, on_acquired=_on_acquired, generation_mode=req.generation_mode, sequence_id=req.sequence_id)
             vurl = media_url(res["filename"])
-            store.update_task(task["id"], status="completed", progress=100, account=acc_id,
+            _task_update(task["id"], status="completed", progress=100, account=acc_id,
                               elapsed=round(time.time() - timing["t0"], 1),
                               url=vurl,
                               video={"url": vurl},
@@ -1195,12 +1240,19 @@ async def create_video(req: VideoRequest, _=Depends(auth)):
                                       "filename": res["filename"],
                                       "bytes": res["size"], "kind": res["kind"]})
         except Exception as exc:  # noqa: BLE001
-            store.update_task(task["id"], status="failed",
+            _task_update(task["id"], status="failed",
                               elapsed=round(time.time() - timing["t0"], 1), error=str(exc))
 
     threading.Thread(target=worker, daemon=True).start()
     return {"id": task["id"], "task_id": task["id"], "object": "video.task", "status": "queued",
             "progress": 10, "created_at": task["created_at"]}
+
+
+@app.post("/admin/generate/video")
+async def admin_generate_video(req: VideoRequest, user=Depends(webauth.require_role("member"))):
+    """Same logic as POST /v1/videos, gated by team RBAC instead of the
+    bearer key — see admin_generate_image for why this wrapper exists."""
+    return await create_video(req)
 
 
 @app.get("/v1/videos/{task_id}")
@@ -1414,6 +1466,13 @@ async def chat_completions(req: ChatRequest, _=Depends(auth)):
             "usage": usage}
 
 
+@app.post("/admin/generate/chat")
+async def admin_chat_completions(req: ChatRequest, user=Depends(webauth.require_role("member"))):
+    """Same logic as POST /v1/chat/completions, gated by team RBAC — see
+    admin_generate_image for why this wrapper exists."""
+    return await chat_completions(req)
+
+
 def _responses_messages(req: ResponsesRequest) -> list[ChatMessage]:
     """把 Responses API 的 instructions / input 归一成 messages。"""
     msgs: list[ChatMessage] = []
@@ -1547,7 +1606,7 @@ def get_media(name: str):
 
 # ------------------------- 管理：总览 -------------------------
 @app.get("/admin/status")
-def admin_status(_=Depends(auth)):
+def admin_status(_=Depends(webauth.require_role("viewer"))):
     base = _public_base()
     return {
         "accounts": store.list_accounts(),
@@ -1569,12 +1628,12 @@ def admin_status(_=Depends(auth)):
 
 # ------------------------- 管理：账号池 -------------------------
 @app.get("/admin/accounts")
-def list_accounts(_=Depends(auth)):
+def list_accounts(_=Depends(webauth.require_role("viewer"))):
     return {"accounts": store.list_accounts(), "stats": store.stats()}
 
 
 @app.post("/admin/accounts")
-def add_account(req: AccountRequest, _=Depends(auth)):
+async def add_account(req: AccountRequest, request: Request, user=Depends(webauth.require_role("member"))):
     added: list[dict] = []
     seen: list[dict] = []          # 本次导入的所有 cookie，用来检查核心项是否齐全
 
@@ -1602,6 +1661,8 @@ def add_account(req: AccountRequest, _=Depends(auth)):
     # 只要有一个账号把核心 cookie 凑齐就算通过（批量时按整体判断）
     missing = [n for n in ESSENTIAL_COOKIES
                if not any(n in c for c in seen)]
+    await db.audit("account_add", user, target=",".join(a["id"] for a in added),
+                   detail={"count": len(added)}, ip=request.client.host if request.client else None)
     return {"added": added, "count": len(added),
             "essential_missing": missing,
             "warning": (f"缺少核心 cookie：{', '.join(missing)}，该账号可能无法生成"
@@ -1609,24 +1670,27 @@ def add_account(req: AccountRequest, _=Depends(auth)):
 
 
 @app.patch("/admin/accounts/{aid}")
-def patch_account(aid: str, req: AccountPatch, _=Depends(auth)):
+async def patch_account(aid: str, req: AccountPatch, request: Request, user=Depends(webauth.require_role("member"))):
     acc = store.update_account(aid, label=req.label, enabled=req.enabled)
     if not acc:
         raise HTTPException(404, "账号不存在")
+    await db.audit("account_update", user, target=aid, detail={"label": req.label, "enabled": req.enabled},
+                   ip=request.client.host if request.client else None)
     return {k: v for k, v in acc.items() if k != "cookies"} | {
         "cookie_count": len(acc.get("cookies", {}))}
 
 
 @app.delete("/admin/accounts/{aid}")
-def del_account(aid: str, _=Depends(auth)):
+async def del_account(aid: str, request: Request, user=Depends(webauth.require_role("admin"))):
     ok = store.delete_account(aid)
     if not ok:
         raise HTTPException(404, "账号不存在")
+    await db.audit("account_delete", user, target=aid, ip=request.client.host if request.client else None)
     return {"deleted": True, "id": aid}
 
 
 @app.post("/admin/accounts/{aid}/test")
-async def test_account(aid: str, _=Depends(auth)):
+async def test_account(aid: str, _=Depends(webauth.require_role("member"))):
     """真实打开 muse.ai 验证该账号 cookie 是否仍可登录。"""
     acc = store.get_account(aid)
     if not acc:
@@ -1665,12 +1729,12 @@ async def test_account(aid: str, _=Depends(auth)):
 
 
 @app.post("/admin/accounts/{aid}/relogin")
-async def relogin_account(aid: str, _=Depends(auth)):
+async def relogin_account(aid: str, _=Depends(webauth.require_role("member"))):
     return await test_account(aid, _)
 
 
 @app.post("/admin/accounts/{aid}/cookies")
-def update_cookies(aid: str, payload: dict = Body(...), _=Depends(auth)):
+def update_cookies(aid: str, payload: dict = Body(...), _=Depends(webauth.require_role("member"))):
     """更新某个账号的 cookie（用于会话过期后补新 cookie）。"""
     cookies = dict(payload.get("cookies") or {})
     if payload.get("cookie_header"):
@@ -1692,7 +1756,7 @@ def update_cookies(aid: str, payload: dict = Body(...), _=Depends(auth)):
 
 
 @app.post("/admin/relogin")
-def relogin(_=Depends(auth)):
+def relogin(_=Depends(webauth.require_role("admin"))):
     acc = store.pick_account(rotate=True)
     if not acc:
         raise HTTPException(400, "没有可用账号")
@@ -1706,7 +1770,7 @@ def relogin(_=Depends(auth)):
 
 # ------------------------- 管理：额度 -------------------------
 @app.post("/admin/accounts/{aid}/quota")
-async def query_quota(aid: str, _=Depends(auth)):
+async def query_quota(aid: str, _=Depends(webauth.require_role("viewer"))):
     """打开 muse.ai 的 Settings 面板读该账号的额度（实时），并缓存到账号记录。
 
     返回例：{"plan":"Free plan","weekly_reset":"Sep 30",
@@ -1739,7 +1803,7 @@ async def query_quota(aid: str, _=Depends(auth)):
 
 
 @app.post("/admin/quota")
-async def query_any_quota(_=Depends(auth)):
+async def query_any_quota(_=Depends(webauth.require_role("viewer"))):
     """用当前最久未用的可用账号查一次额度（同池账号共享同一 muse.ai 计划的
     通常只有一人使用时够用；多账号时建议按账号查）。"""
     acc = store.pick_account(rotate=True)
@@ -1754,7 +1818,7 @@ def _public_base() -> str:
 
 
 @app.get("/admin/apikey")
-def get_apikey(_=Depends(auth)):
+def get_apikey(_=Depends(webauth.require_role("owner"))):
     base = _public_base()
     base_url = f"{base}/v1" if base else ""
     return {"api_key": CFG.api_key, "base_url": base_url,
@@ -1763,7 +1827,7 @@ def get_apikey(_=Depends(auth)):
 
 
 @app.post("/admin/apikey/rotate")
-def rotate_apikey(_=Depends(auth)):
+def rotate_apikey(_=Depends(webauth.require_role("owner"))):
     """生成新的 API Key，写入 .env 并立即生效（不用重启）。"""
     import secrets
     new_key = "m2a_" + secrets.token_hex(24)
@@ -1844,26 +1908,58 @@ def extension_files():
 
 # ------------------------- 管理：任务 / 媒体 -------------------------
 @app.get("/admin/tasks")
-def admin_tasks(limit: int = 1000, account_id: str|None=None, _=Depends(auth)):
+def admin_tasks(limit: int = 1000, account_id: str|None=None, _=Depends(webauth.require_role("viewer"))):
     tasks=store.list_tasks(100000 if account_id else limit)
     if account_id:tasks=[t for t in tasks if (t.get('account') or 'unassigned')==account_id][:limit]
     return {'tasks':[dict(t,account_label=(store.get_account(t.get('account')) or {}).get('label',t.get('account') or 'Chưa phân loại')) for t in tasks]}
 
 
+@app.get("/admin/tasks/{tid}/stream")
+async def stream_task(tid: str, _=Depends(webauth.require_role("viewer"))):
+    """SSE tiến độ task thay vì polling — đóng stream khi completed/failed."""
+    task = store.get_task(tid)
+    if not task:
+        raise HTTPException(404, "任务不存在")
+
+    async def gen():
+        # Gửi state hiện tại ngay lúc connect, tránh miss nếu task vừa xong
+        # trước khi client kịp subscribe.
+        current = store.get_task(tid) or {}
+        yield _sse({"status": current.get("status"), "progress": current.get("progress"),
+                   "error": current.get("error"), "url": current.get("url")})
+        if current.get("status") in ("completed", "failed"):
+            return
+        q = await task_events.TASK_BUS.subscribe(tid)
+        try:
+            while True:
+                try:
+                    event = await asyncio.wait_for(q.get(), timeout=25.0)
+                except asyncio.TimeoutError:
+                    yield _sse({"ping": True})
+                    continue
+                yield _sse(event)
+                if event.get("status") in ("completed", "failed"):
+                    return
+        finally:
+            task_events.TASK_BUS.unsubscribe(tid, q)
+
+    return StreamingResponse(gen(), media_type="text/event-stream", headers=_SSE_HEADERS)
+
+
 @app.delete("/admin/tasks/{tid}")
-def del_task(tid: str, _=Depends(auth)):
+def del_task(tid: str, _=Depends(webauth.require_role("member"))):
     if not store.delete_task(tid):
         raise HTTPException(404, "任务不存在")
     return {"deleted": True}
 
 
 @app.post("/admin/tasks/clear")
-def clear_tasks(payload: dict = Body(default={}), _=Depends(auth)):
+def clear_tasks(payload: dict = Body(default={}), _=Depends(webauth.require_role("admin"))):
     return {"removed": store.clear_tasks(int(payload.get("keep") or 0))}
 
 
 @app.get("/admin/media")
-def admin_media(account_id: str|None=None,_=Depends(auth)):
+def admin_media(account_id: str|None=None,_=Depends(webauth.require_role("viewer"))):
     d = CFG.media_dir
     items = []
     if os.path.isdir(d):
@@ -1891,7 +1987,7 @@ def admin_media(account_id: str|None=None,_=Depends(auth)):
 
 
 @app.post("/admin/media/delete")
-def delete_media(payload: dict = Body(default={}), _=Depends(auth)):
+def delete_media(payload: dict = Body(default={}), _=Depends(webauth.require_role("admin"))):
     names = payload.get("names", [])
     if isinstance(names, str):
         names = [names]
@@ -1917,7 +2013,7 @@ def delete_media(payload: dict = Body(default={}), _=Depends(auth)):
 
 
 @app.delete("/admin/media/{name}")
-def delete_single_media(name: str, _=Depends(auth)):
+def delete_single_media(name: str, _=Depends(webauth.require_role("member"))):
     if "/" in name or "\\" in name or ".." in name:
         raise HTTPException(400, "非法文件名")
     p = os.path.join(CFG.media_dir, name)
@@ -2046,6 +2142,18 @@ async def run_keepalive_all(force: bool = False) -> dict:
                 res = await asyncio.to_thread(_probe_account_sync, aid, False)
                 results.append(res)
                 log.info("【自动保活】账号 %s 执行结果: ok=%s expires_at=%s", label, res.get("ok"), res.get("expires_at"))
+
+                if CFG.alert_expiry_hours > 0:
+                    fresh = store.get_account(aid) or {}
+                    fexp = fresh.get("expires_at")
+                    window = CFG.alert_expiry_hours * 3600
+                    if fexp and fexp - now < window and now - (fresh.get("last_alert_at") or 0) > window:
+                        hours_left = max(0, (fexp - now) // 3600)
+                        telegram_bot.send_alert(
+                            f"⚠️ Tài khoản Muse \"{label}\" ({aid}) sắp hết hạn trong ~{hours_left}h "
+                            f"— vào tab Tài khoản để làm mới cookie.")
+                        store.update_account(aid, last_alert_at=now)
+
                 await asyncio.sleep(0.5)
 
             summary = {
@@ -2102,7 +2210,7 @@ async def _keepalive_loop():
 
 
 @app.post("/admin/accounts/keepalive")
-async def trigger_keepalive_all(force: bool = True, _=Depends(auth)):
+async def trigger_keepalive_all(force: bool = True, _=Depends(webauth.require_role("member"))):
     """管理员手动触发一次全账号保活续期。"""
     if KEEPALIVE_STATE["running"]:
         return {"status": "busy", "message": "保活任务正在执行中，请稍候"}
@@ -2110,13 +2218,13 @@ async def trigger_keepalive_all(force: bool = True, _=Depends(auth)):
 
 
 @app.post("/admin/accounts/{aid}/keepalive")
-async def trigger_keepalive_single(aid: str, _=Depends(auth)):
+async def trigger_keepalive_single(aid: str, _=Depends(webauth.require_role("member"))):
     """手动针对单个账号执行保活续期。"""
     return await asyncio.to_thread(_probe_account_sync, aid, False)
 
 
 @app.get("/admin/keepalive/status")
-def get_keepalive_status(_=Depends(auth)):
+def get_keepalive_status(_=Depends(webauth.require_role("viewer"))):
     """获取保活守护协程状态。"""
     return KEEPALIVE_STATE
 
@@ -2126,9 +2234,11 @@ REPO_URL = "https://github.com/czg86389-hub/muse2api"
 UPDATER_ENABLED = os.environ.get("MUSE2API_UPDATER_ENABLED", "0").strip().lower() in ("1", "true", "yes", "on")
 TRACKED_REPO_PATHS = [
     "app.py", "engine.py", "store.py", "cdp.py", "config.py",
-    "admin.html", "README.md", "version.json", "requirements.txt",
+    "db.py", "providers.py", "proxy_forward.py", "task_events.py",
+    "webauth.py", "webroutes.py",
+    "README.md", "version.json", "requirements.txt",
     "Dockerfile", "docker-compose.yml", ".env.example", ".gitignore",
-    "LICENSE", "extension", "deploy", "tools",
+    "LICENSE", "extension", "deploy", "tools", "frontend", "migrations", "scripts",
 ]
 _UPDATE_CACHE: dict[str, Any] = {"ts": 0.0, "data": None}
 
@@ -2392,7 +2502,7 @@ async def admin_check_update(force: bool = False):
 
 @app.post("/admin/update/upgrade")
 @app.post("/admin/repo/pull")
-async def admin_upgrade_now(payload: dict = Body(default={}), _=Depends(auth)):
+async def admin_upgrade_now(payload: dict = Body(default={}), _=Depends(webauth.require_role("owner"))):
     """一键从 GitHub 官方仓库拉取最新更新并自动平滑重启服务。"""
     if not UPDATER_ENABLED:
         raise HTTPException(404, "Online updates are disabled. Update manually from your chosen repository.")
@@ -2411,7 +2521,7 @@ async def admin_upgrade_now(payload: dict = Body(default={}), _=Depends(auth)):
 
 
 @app.post("/admin/repo/push")
-async def admin_repo_push(payload: dict = Body(default={}), _=Depends(auth)):
+async def admin_repo_push(payload: dict = Body(default={}), _=Depends(webauth.require_role("owner"))):
     """维护者专用：将当前节点核心代码推送到 GitHub 仓库（自动过滤 .env 与 data 目录）。"""
     if os.environ.get("MUSE2API_ALLOW_WEB_PUSH", "0").strip().lower() not in ("1", "true", "yes", "on"):
         raise HTTPException(404, "Web-based repository publishing is disabled.")
@@ -2451,21 +2561,30 @@ async def admin_repo_push(payload: dict = Body(default={}), _=Depends(auth)):
 
 @app.on_event("startup")
 async def _startup():
+    task_events.TASK_BUS.bind_loop(asyncio.get_running_loop())
     for task in list(store.tasks.values()):
         if task.get("kind") in ("image", "video") and task.get("status") in ("queued", "processing"):
-            store.update_task(task["id"], status="failed", error="服务重启中断了任务，请重新提交")
+            _task_update(task["id"], status="failed", error="服务重启中断了任务，请重新提交")
     if not CFG.api_key:
         import secrets
         new_key = "m2a_" + secrets.token_hex(24)
         CFG.api_key = new_key
         _persist_env("MUSE2API_KEY", new_key)
         log.info("🔑 未检测到 MUSE2API_KEY，已自动生成初始密钥: %s", new_key)
+    if not CFG.session_secret:
+        import secrets
+        new_secret = secrets.token_hex(32)
+        CFG.session_secret = new_secret
+        _persist_env("MUSE2API_SESSION_SECRET", new_secret)
+        log.info("🔑 未检测到 MUSE2API_SESSION_SECRET，已自动生成")
+    await db.init()
     asyncio.create_task(_keepalive_loop())
 
 
 @app.on_event("shutdown")
-def _shutdown():
+async def _shutdown():
     engine.stop()
+    await db.close()
 
 # Standalone batch extension
 from batch_addon import install as _install_batch

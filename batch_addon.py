@@ -3,7 +3,7 @@ import asyncio, json, threading, time, uuid, io, zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 from fastapi import Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import Response
 
 def parse_file(name, data):
     if len(data)>5*1024*1024: raise ValueError("File tối đa 5 MB")
@@ -115,14 +115,6 @@ def install(g):
             if bid not in batches:raise HTTPException(404,'Không tìm thấy lô')
             refresh(batches[bid])
             return {'id':bid,'items':report_rows(batches[bid]['items'],statuses)}
-    @app.get('/batch',response_class=HTMLResponse)
-    def page(): return (Path(g['BASE_DIR'])/'batch.html').read_text('utf-8')
-    @app.get('/video_reference_picker.js')
-    def reference_picker():
-        return Response((Path(g['BASE_DIR'])/'video_reference_picker.js').read_text('utf-8'),media_type='application/javascript')
-    @app.get('/studio_panels.js')
-    def studio_panels():
-        return Response((Path(g['BASE_DIR'])/'studio_panels.js').read_text('utf-8'),media_type='application/javascript')
     @app.post('/v1/batches/import')
     async def import_file(request:Request,_=Depends(auth)):
         try: prompts=parse_file(request.headers.get('X-Filename',''),await request.body())
@@ -200,3 +192,22 @@ def install(g):
             save()
         if action in ('resume','retry-failed'):start_worker(bid)
         return {'ok':True}
+
+    # Team-RBAC wrappers of the routes above, for the Next.js web UI (session
+    # login has no bearer key). Same logic, gated by require_role instead.
+    webauth=g['webauth']
+    @app.post('/admin/batches/import')
+    async def admin_import_file(request:Request,user=Depends(webauth.require_role('member'))):
+        return await import_file(request)
+    @app.post('/admin/batches')
+    async def admin_create_batch(request:Request,user=Depends(webauth.require_role('member'))):
+        return await create(request)
+    @app.get('/admin/batches')
+    def admin_list_batches(user=Depends(webauth.require_role('viewer'))):
+        return listing()
+    @app.post('/admin/batches/{bid}/{action}')
+    def admin_control_batch(bid:str,action:str,account_id:str|None=None,user=Depends(webauth.require_role('member'))):
+        return control(bid,action,account_id)
+    @app.get('/admin/batches/{bid}/report')
+    def admin_batch_report(bid:str,statuses:str='',user=Depends(webauth.require_role('viewer'))):
+        return report(bid,statuses)

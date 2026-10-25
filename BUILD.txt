@@ -1,6 +1,0 @@
-Source: Python 3.12 x64 + requirements-standalone.txt + requirements-gui.txt + pyinstaller==6.22.0
-Build: python -m PyInstaller --noconfirm Muse2API_Studio.spec
-Copy HTML/JS/version.json beside the resulting EXE. Keep _internal.
-Copy MSVC runtime DLLs from the same PySide6 wheel to _internal.
-Do not bundle ICU from unrelated PATH tools such as Poppler; Qt uses native Windows ICU.
-Use the unmodified clean ZIP to distribute; never copy data/.env from your working instance.

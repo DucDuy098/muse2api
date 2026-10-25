@@ -22,6 +22,8 @@ import time
 import uuid
 
 from cdp import CDP, http_json
+import proxy_forward
+import providers
 
 log = logging.getLogger("muse2api")
 
@@ -43,6 +45,7 @@ class MuseGenerationError(RuntimeError):
 class MuseEngine:
     def __init__(self, cfg):
         self.cfg = cfg
+        self.provider = providers.get_provider(getattr(cfg, "provider", None))
         self.proc: subprocess.Popen | None = None
         self.browser: CDP | None = None
         self._local = threading.local()
@@ -111,6 +114,12 @@ class MuseEngine:
             f"--user-data-dir={self.cfg.profile_dir}",
             "about:blank",
         ]
+        proxy = self.cfg.proxy
+        if proxy:
+            local_port = proxy_forward.ensure_started(
+                proxy["host"], proxy["port"], proxy["user"], proxy["pass"],
+                self.cfg.proxy_local_port)
+            args.insert(1, f"--proxy-server=127.0.0.1:{local_port}")
         # 尝试复用已有健康 CDP
         if not self.proc:
             try:
@@ -223,25 +232,26 @@ class MuseEngine:
         self._close_page()
         raise MuseGenerationError('Chưa tạo được phiên trình duyệt riêng; hãy chạy lại dịch vụ')
 
-    @staticmethod
-    def renew_session_http(cookies: dict, expires: dict | None = None,
+    def renew_session_http(self, cookies: dict, expires: dict | None = None,
                            wake_vm: bool = True) -> dict:
-        """直接调用 muse.ai/api/session 续签 hatch_vml (+48h) / hatch_sess (+30d) / hatch_gw (+1y)，
+        """直接调用 /api/session 续签 hatch_vml (+48h) / hatch_sess (+30d) / hatch_gw (+1y)，
         并按需调用 /api/hatch/vm/wake 唤醒云端工作区 VM。"""
         import requests
+        provider = self.provider
+        base = provider.site_url.rstrip("/")
         cur_cookies = dict(cookies or {})
         cur_exp = dict(expires or {})
         headers = {
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
-            "Origin": "https://muse.ai",
-            "Referer": "https://muse.ai/thread/new",
+            "Origin": base,
+            "Referer": base + provider.thread_new_path,
             "Sec-Fetch-Site": "same-origin",
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Dest": "empty",
             "Cookie": "; ".join(f"{k}={v}" for k, v in cur_cookies.items() if v),
         }
         try:
-            r = requests.get("https://muse.ai/api/session", headers=headers,
+            r = requests.get(base + provider.api_session_path, headers=headers,
                              timeout=12, allow_redirects=False)
         except requests.RequestException as exc:
             # 不回显请求内容：异常可能包含带凭据的代理 URL。
@@ -270,7 +280,7 @@ class MuseEngine:
         if wake_vm and vm_id and vm_state != "DISABLED":
             try:
                 headers["Cookie"] = "; ".join(f"{k}={v}" for k, v in cur_cookies.items() if v)
-                rw = requests.post("https://muse.ai/api/hatch/vm/wake", headers=headers, json={
+                rw = requests.post(base + provider.api_vm_wake_path, headers=headers, json={
                     "vm_id": vm_id,
                     "retry_count": 0,
                     "connect_attempt_id": str(uuid.uuid4()),
@@ -303,7 +313,7 @@ class MuseEngine:
                 exp_val = float(exp) if exp and float(exp) > now + 3600 else (now + 7 * 86400)
             except (TypeError, ValueError):
                 exp_val = now + 7 * 86400
-            for dom in (".muse.ai", "muse.ai"):
+            for dom in self.provider.cookie_domains:
                 params = {
                     "name": name,
                     "value": value,
@@ -391,7 +401,7 @@ class MuseEngine:
                 return (window.location.pathname !== '/thread/new') || bubbleCount > 0;
             })(%s)""" % ("true" if for_chat else "false"))
             if needs_nav:
-                self.page.send("Page.navigate", {"url": "https://muse.ai/thread/new"})
+                self.page.send("Page.navigate", {"url": self.provider.site_url.rstrip("/") + self.provider.thread_new_path})
                 t_end = time.time() + 10.0
                 while time.time() < t_end:
                     time.sleep(0.08)
@@ -436,7 +446,7 @@ class MuseEngine:
 
         page = self._open_page()
         self._apply_cookies(page, cookies, expires)
-        page.send("Page.navigate", {"url": "https://muse.ai/thread/new"})
+        page.send("Page.navigate", {"url": self.provider.site_url.rstrip("/") + self.provider.thread_new_path})
         for _ in range(self.cfg.login_wait * 2):
             time.sleep(0.15)
             try:

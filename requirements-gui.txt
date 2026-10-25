@@ -1,2 +1,0 @@
-# Qt Widgets, Qt Multimedia and bundled media backend for embedded playback.
-PySide6==6.10.1

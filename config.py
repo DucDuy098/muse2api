@@ -76,6 +76,12 @@ class Config:
     site_url: str = field(default_factory=lambda: _env("MUSE2API_SITE", "https://muse.ai/"))
     login_wait: int = field(default_factory=lambda: int(_env("MUSE2API_LOGIN_WAIT", "60")))
 
+    # 出站代理，给无头 Chromium 用（必须和导入 cookie 时登录用的出口 IP 一致，
+    # 否则 muse.ai 会因 IP 跳变判定会话异常并返回 401）。
+    # 格式：host:port 或 host:port:user:pass
+    proxy_raw: str = field(default_factory=lambda: _env("MUSE2API_PROXY", ""))
+    proxy_local_port: int = field(default_factory=lambda: int(_env("MUSE2API_PROXY_LOCAL_PORT", "19219")))
+
     # 浏览器 profile 根目录。
     # 踩过的坑：snap 版 chromium 受 AppArmor 约束，只能读写 $HOME 下的路径。
     # 传 --user-data-dir=/opt/... 或 /tmp/... 不会报错，但会被静默忽略，
@@ -88,6 +94,14 @@ class Config:
 
     # 鉴权
     api_key: str = field(default_factory=lambda: _env("MUSE2API_KEY", ""))
+
+    # Web UI session cookie 签名密钥（webauth.py）；留空则启动时自动生成并写回 .env，
+    # 和 MUSE2API_KEY 走同一套 _persist_env() 机制。
+    session_secret: str = field(default_factory=lambda: _env("MUSE2API_SESSION_SECRET", ""))
+
+    # 多用户后台（users/audit_log）用的 Postgres 连接串；留空则该功能不启用，
+    # 核心生成引擎不依赖这个库。
+    db_url: str = field(default_factory=lambda: _env("MUSE2API_DB_URL", ""))
 
     # 对外地址（管理页面显示「接入地址」用；留空则页面用当前域名兜底）
     public_base: str = field(
@@ -112,11 +126,29 @@ class Config:
     tool_protocol: bool = field(
         default_factory=lambda: _env("MUSE2API_TOOL_PROTOCOL", "0").strip() != "0")
 
+    # 账号/cookie 临期提醒阈值（小时），通过 Telegram 发送；0 = 关闭提醒。
+    alert_expiry_hours: int = field(
+        default_factory=lambda: int(_env("MUSE2API_ALERT_EXPIRY_HOURS", "12")))
+
     # 保活设置：是否对已禁用的账号执行自动保活，**默认关闭**。
     # 开启后，被管理员在后台手动禁用的账号仍会由后台守护进程执行自动保活与 VM 唤醒，
     # 保持会话活性不失效，但依然不会参与正常业务生图、生视频与对话轮转调度。
     keepalive_disabled_accounts: bool = field(
         default_factory=lambda: _env("MUSE2API_KEEPALIVE_DISABLED_ACCOUNTS", "0").strip() != "0")
+
+    @property
+    def proxy(self) -> dict | None:
+        raw = self.proxy_raw.strip()
+        if not raw:
+            return None
+        parts = raw.split(":")
+        if len(parts) == 2:
+            host, port = parts
+            return {"host": host, "port": int(port), "user": None, "pass": None}
+        if len(parts) == 4:
+            host, port, user, pwd = parts
+            return {"host": host, "port": int(port), "user": user, "pass": pwd}
+        return None
 
     @property
     def data_dir(self) -> str:
