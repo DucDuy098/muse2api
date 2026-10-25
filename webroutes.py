@@ -57,8 +57,14 @@ async def login(body: LoginBody, request: Request, response: Response):
             raise HTTPException(401, "Sai tên đăng nhập hoặc mật khẩu")
         await conn.execute("UPDATE users SET last_login_at = now() WHERE id = $1", row["id"])
     token = webauth.make_session_cookie(row["id"], row["username"], row["role"])
+    # Browsers never send a Secure cookie back over plain HTTP — a dev/sslip.io
+    # deploy without TLS yet would set the cookie on login and then silently
+    # drop it on every request after. Traefik terminates TLS and talks plain
+    # HTTP to this container, so detect the original scheme from its header
+    # instead of hardcoding secure=True.
+    is_https = request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
     response.set_cookie(webauth.SESSION_COOKIE_NAME, token, httponly=True, samesite="lax",
-                        secure=True, max_age=webauth.SESSION_MAX_AGE, path="/")
+                        secure=is_https, max_age=webauth.SESSION_MAX_AGE, path="/")
     user = {"uid": row["id"], "u": row["username"]}
     await db.audit("login", user, ip=ip)
     return {"id": row["id"], "username": row["username"], "role": row["role"]}
