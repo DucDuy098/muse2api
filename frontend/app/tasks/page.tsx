@@ -4,6 +4,14 @@ import { useEffect, useState, useCallback } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -63,7 +71,7 @@ export default function TasksPage() {
               <TableHead>Trạng thái</TableHead>
               <TableHead>Tài khoản</TableHead>
               <TableHead>Tạo lúc</TableHead>
-              {canDelete && <TableHead className="text-right">Thao tác</TableHead>}
+              <TableHead className="text-right">Thao tác</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -85,8 +93,59 @@ export default function TasksPage() {
                   </TableCell>
                   <TableCell className="text-sm">{t.account_label ?? t.account ?? "—"}</TableCell>
                   <TableCell className="text-sm">{fmtTime(t.created_at)}</TableCell>
-                  {canDelete && (
-                    <TableCell className="text-right">
+                  <TableCell className="text-right space-x-1">
+                    <Dialog>
+                      <DialogTrigger render={<Button size="sm" variant="outline" />}>
+                        Chi tiết
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-lg">
+                        <DialogHeader>
+                          <DialogTitle className="font-mono text-sm">{t.id}</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-3 text-sm">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">{t.kind}</Badge>
+                            <Badge variant={t.status === "failed" ? "destructive" : t.status === "completed" ? "default" : "secondary"}>
+                              {STATUS_LABEL[t.status] ?? t.status}
+                            </Badge>
+                          </div>
+                          {t.status === "processing" && t.progress != null && (
+                            <div className="space-y-1">
+                              <div className="flex justify-between text-xs text-muted-foreground">
+                                <span>Tiến độ</span>
+                                <span>{t.progress}%</span>
+                              </div>
+                              <Progress value={t.progress} />
+                            </div>
+                          )}
+                          <div>
+                            <div className="text-xs text-muted-foreground mb-1">Mô tả</div>
+                            <p className="whitespace-pre-wrap">{t.prompt}</p>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                            <div>Tài khoản: {t.account_label ?? t.account ?? "—"}</div>
+                            <div>Tạo lúc: {fmtTime(t.created_at)}</div>
+                          </div>
+                          {t.status === "failed" && t.error && (
+                            <div>
+                              <div className="text-xs text-muted-foreground mb-1">Lỗi</div>
+                              <p className="text-destructive whitespace-pre-wrap">{t.error}</p>
+                            </div>
+                          )}
+                          {t.status === "completed" && (() => {
+                            const mediaUrl = t.url ?? t.result?.url;
+                            if (!mediaUrl) return null;
+                            return t.kind === "video" ? (
+                              <video src={api.base + mediaUrl} controls className="rounded border border-border max-w-full" />
+                            ) : (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={api.base + mediaUrl} alt="" className="rounded border border-border max-w-full" />
+                            );
+                          })()}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                    {canDelete && (
                       <Button size="sm" variant="outline"
                         onClick={async () => {
                           try {
@@ -98,8 +157,8 @@ export default function TasksPage() {
                         }}>
                         Xoá
                       </Button>
-                    </TableCell>
-                  )}
+                    )}
+                  </TableCell>
                 </TableRow>
               ))
             )}

@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -81,7 +83,7 @@ export default function PlaygroundPage() {
   const resultUrl = event?.url ? api.base + event.url : null;
 
   return (
-    <div className="grid lg:grid-cols-2 gap-6 max-w-5xl">
+    <div className="grid lg:grid-cols-2 gap-6 max-w-[1600px]">
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Dùng thử</CardTitle>
@@ -141,7 +143,7 @@ export default function PlaygroundPage() {
             </div>
             <div className="space-y-2">
               <Label>Ảnh tham khảo (tùy chọn, tối đa {MAX_REFERENCE_IMAGES})</Label>
-              <input
+              <Input
                 type="file"
                 accept="image/*"
                 multiple
@@ -154,7 +156,6 @@ export default function PlaygroundPage() {
                   setReferenceImages((prev) => [...prev, ...urls.slice(0, room)]);
                   e.target.value = "";
                 }}
-                className="text-sm"
               />
               {referenceImages.length > 0 && (
                 <div className="flex flex-wrap gap-2">
@@ -191,7 +192,15 @@ export default function PlaygroundPage() {
             <div className="space-y-2 text-sm">
               <div>Mã tác vụ: <code>{taskId}</code></div>
               <div>Trạng thái: {event?.status ?? "đang gửi..."}</div>
-              {event?.progress != null && <div>Tiến độ: {event.progress}%</div>}
+              {event?.progress != null && (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Tiến độ</span>
+                    <span>{event.progress}%</span>
+                  </div>
+                  <Progress value={event.progress} />
+                </div>
+              )}
               {event?.status === "failed" && <p className="text-destructive">{event.error}</p>}
               {event?.status === "completed" && (
                 kind === "image" ? (

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -108,16 +109,15 @@ export default function BatchPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6">
       <h1 className="text-xl font-semibold">Excel / TXT — Tạo hàng loạt</h1>
 
-      <Card>
+      <Card className="max-w-4xl">
         <CardHeader><CardTitle className="text-base">Import prompt</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label>File .txt hoặc .xlsx (mỗi dòng/cột "prompt" một ảnh/video)</Label>
-            <input ref={fileRef} type="file" accept=".txt,.xlsx" onChange={onFile} disabled={importing}
-              className="text-sm" />
+            <Input ref={fileRef} type="file" accept=".txt,.xlsx" onChange={onFile} disabled={importing} />
           </div>
           {prompts.length > 0 && (
             <>
