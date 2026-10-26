@@ -898,7 +898,7 @@ def _run_generation_locked(prompt: str, kind: str, timeout: int,
             if deadline is not None and time.monotonic() >= deadline:
                 raise MuseGenerationError("Đã hết thời gian chờ tổng, dừng thử lại")
             if attempt > 0:
-                if last_exc and "Không tạo được ảnh/video, chỉ nhận được phản hồi văn bản" in str(last_exc):
+                if last_exc and "chỉ trả về văn bản" in str(last_exc):
                     break
                 old_id = cur_acc["id"] if cur_acc else None
                 if old_id:
