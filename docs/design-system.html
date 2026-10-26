@@ -1,0 +1,284 @@
+<!-- @dsCard group="Foundations" -->
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8" />
+<title>Muse2API Studio — Design System</title>
+<style>
+  :root {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --radius: 0.625rem;
+    --sidebar: oklch(0.985 0 0);
+    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar-primary: oklch(0.205 0 0);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.708 0 0);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+  }
+  .dark {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.556 0 0);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: Geist, "Geist Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 48px 24px 96px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  .sub { color: var(--muted-foreground); margin: 0 0 40px; font-size: 14px; }
+  h2 { font-size: 18px; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin: 48px 0 20px; }
+  h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted-foreground); margin: 24px 0 10px; }
+  code { font-family: "Geist Mono", ui-monospace, monospace; font-size: 12px; background: var(--muted); padding: 2px 5px; border-radius: 4px; }
+
+  .grid { display: grid; gap: 12px; }
+  .cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+  .swatch { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+  .swatch .fill { height: 56px; }
+  .swatch .label { padding: 8px 10px; font-size: 12px; background: var(--card); }
+  .swatch .label b { display: block; font-size: 12.5px; }
+  .swatch .label span { color: var(--muted-foreground); font-size: 11px; }
+
+  .type-row { display: flex; align-items: baseline; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .type-row .meta { width: 150px; flex-shrink: 0; color: var(--muted-foreground); font-size: 12px; }
+
+  .radius-row, .space-row { display: flex; align-items: center; gap: 16px; padding: 10px 0; }
+  .radius-box { width: 48px; height: 48px; background: var(--muted); border: 1px solid var(--border); flex-shrink: 0; }
+  .space-box { height: 20px; background: var(--primary); flex-shrink: 0; }
+
+  /* Button */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: var(--radius-md); font-size: 13px; font-weight: 500; border: 1px solid transparent; cursor: pointer; white-space: nowrap; }
+  .btn-default { background: var(--primary); color: var(--primary-foreground); }
+  .btn-outline { background: var(--background); border-color: var(--border); color: var(--foreground); }
+  .btn-secondary { background: var(--secondary); color: var(--secondary-foreground); }
+  .btn-ghost { background: transparent; color: var(--foreground); }
+  .btn-destructive { background: color-mix(in oklch, var(--destructive) 10%, transparent); color: var(--destructive); }
+  .btn-link { background: transparent; color: var(--primary); text-decoration: underline; text-underline-offset: 4px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+  /* Badge */
+  .badge { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 500; border: 1px solid transparent; }
+  .badge-default { background: var(--primary); color: var(--primary-foreground); }
+  .badge-secondary { background: var(--secondary); color: var(--secondary-foreground); }
+  .badge-destructive { background: color-mix(in oklch, var(--destructive) 10%, transparent); color: var(--destructive); }
+  .badge-outline { border-color: var(--border); color: var(--foreground); }
+
+  /* Card */
+  .card { background: var(--card); color: var(--card-foreground); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; }
+  .card h4 { margin: 0 0 4px; font-size: 14px; }
+  .card p { margin: 0; font-size: 13px; color: var(--muted-foreground); }
+
+  /* Input */
+  .field-label { display: block; font-size: 13px; margin-bottom: 6px; }
+  .input { width: 100%; height: 32px; padding: 0 10px; background: var(--background); border: 1px solid var(--input); border-radius: var(--radius-md); color: var(--foreground); font-size: 13px; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted-foreground); font-weight: 500; font-size: 12px; }
+
+  /* Tabs */
+  .tabs { display: inline-flex; background: var(--muted); border-radius: var(--radius-md); padding: 3px; gap: 2px; }
+  .tab { padding: 5px 12px; font-size: 12.5px; border-radius: var(--radius-sm); color: var(--muted-foreground); }
+  .tab.active { background: var(--background); color: var(--foreground); }
+
+  .sidebar-demo { display: flex; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; height: 160px; }
+  .sidebar-demo aside { width: 160px; background: var(--sidebar); color: var(--sidebar-foreground); border-right: 1px solid var(--sidebar-border); padding: 12px; font-size: 13px; }
+  .sidebar-demo aside .item { padding: 6px 8px; border-radius: 6px; margin-bottom: 2px; }
+  .sidebar-demo aside .item.active { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
+  .sidebar-demo main { flex: 1; padding: 16px; font-size: 13px; color: var(--muted-foreground); }
+
+  .toggle-note { font-size: 12px; color: var(--muted-foreground); margin-top: -28px; margin-bottom: 20px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Muse2API Studio — Design System</h1>
+  <p class="sub">Extracted from <code>frontend/</code> — Next.js + Tailwind v4 + shadcn (style: <code>base-nova</code>, base color: <code>neutral</code>). App defaults to dark mode (<code>html.dark</code>). Toggle below to compare.</p>
+  <div class="row" style="margin-bottom:8px">
+    <button class="btn btn-outline" onclick="document.documentElement.classList.toggle('dark')">Toggle light / dark</button>
+  </div>
+  <p class="toggle-note"></p>
+
+  <h2>Color tokens</h2>
+  <h3>Core</h3>
+  <div class="grid cols-4">
+    <div class="swatch"><div class="fill" style="background:var(--background)"></div><div class="label"><b>background</b><span>--background</span></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--foreground)"></div><div class="label"><b>foreground</b><span>--foreground</span></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--card)"></div><div class="label"><b>card</b><span>--card</span></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--popover)"></div><div class="label"><b>popover</b><span>--popover</span></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--primary)"></div><div class="label"><b>primary</b><span>--primary</span></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--secondary)"></div><div class="label"><b>secondary</b><span>--secondary</span></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--muted)"></div><div class="label"><b>muted</b><span>--muted</span></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--accent)"></div><div class="label"><b>accent</b><span>--accent</span></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--destructive)"></div><div class="label"><b>destructive</b><span>--destructive</span></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--border)"></div><div class="label"><b>border</b><span>--border</span></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--input)"></div><div class="label"><b>input</b><span>--input</span></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--ring)"></div><div class="label"><b>ring</b><span>--ring</span></div></div>
+  </div>
+
+  <h3>Sidebar</h3>
+  <div class="grid cols-4">
+    <div class="swatch"><div class="fill" style="background:var(--sidebar)"></div><div class="label"><b>sidebar</b><span>--sidebar</span></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--sidebar-primary)"></div><div class="label"><b>sidebar-primary</b><span>--sidebar-primary</span></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--sidebar-accent)"></div><div class="label"><b>sidebar-accent</b><span>--sidebar-accent</span></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--sidebar-border)"></div><div class="label"><b>sidebar-border</b><span>--sidebar-border</span></div></div>
+  </div>
+
+  <h3>Chart</h3>
+  <div class="grid cols-4">
+    <div class="swatch"><div class="fill" style="background:var(--chart-1)"></div><div class="label"><b>chart-1</b></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--chart-2)"></div><div class="label"><b>chart-2</b></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--chart-3)"></div><div class="label"><b>chart-3</b></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--chart-4)"></div><div class="label"><b>chart-4</b></div></div>
+  </div>
+
+  <h2>Typography</h2>
+  <p class="sub" style="margin-bottom:12px">Fonts: <code>Geist</code> (sans, UI default) · <code>Geist Mono</code> (code). Loaded via <code>next/font/google</code>.</p>
+  <div class="type-row"><div class="meta">28px / semibold</div><div style="font-size:28px;font-weight:600">Page title</div></div>
+  <div class="type-row"><div class="meta">18px / medium</div><div style="font-size:18px;font-weight:500">Section heading</div></div>
+  <div class="type-row"><div class="meta">14px / regular</div><div style="font-size:14px">Body text, default UI size</div></div>
+  <div class="type-row"><div class="meta">13px / regular</div><div style="font-size:13px">Dense UI text (tables, buttons)</div></div>
+  <div class="type-row"><div class="meta">12px / regular</div><div style="font-size:12px;color:var(--muted-foreground)">Muted / caption text</div></div>
+  <div class="type-row"><div class="meta">13px / mono</div><div style="font-family:'Geist Mono',monospace;font-size:13px">const token = "Geist Mono";</div></div>
+
+  <h2>Radius &amp; spacing</h2>
+  <h3>Radius scale (base <code>--radius: 0.625rem</code>)</h3>
+  <div class="radius-row"><div class="radius-box" style="border-radius:var(--radius-sm)"></div><code>--radius-sm</code> · ×0.6</div>
+  <div class="radius-row"><div class="radius-box" style="border-radius:var(--radius-md)"></div><code>--radius-md</code> · ×0.8</div>
+  <div class="radius-row"><div class="radius-box" style="border-radius:var(--radius-lg)"></div><code>--radius-lg</code> · ×1.0 (base)</div>
+  <div class="radius-row"><div class="radius-box" style="border-radius:var(--radius-xl)"></div><code>--radius-xl</code> · ×1.4</div>
+
+  <h3>Component heights</h3>
+  <div class="space-row"><div class="space-box" style="width:24px"></div><code>h-6</code> — button xs / icon-xs</div>
+  <div class="space-row"><div class="space-box" style="width:28px"></div><code>h-7</code> — button sm / icon-sm</div>
+  <div class="space-row"><div class="space-box" style="width:32px"></div><code>h-8</code> — button default / input / icon</div>
+  <div class="space-row"><div class="space-box" style="width:36px"></div><code>h-9</code> — button lg / icon-lg</div>
+
+  <h2>Buttons</h2>
+  <h3>Variants</h3>
+  <div class="row">
+    <button class="btn btn-default">Default</button>
+    <button class="btn btn-outline">Outline</button>
+    <button class="btn btn-secondary">Secondary</button>
+    <button class="btn btn-ghost">Ghost</button>
+    <button class="btn btn-destructive">Destructive</button>
+    <button class="btn btn-link">Link</button>
+  </div>
+  <h3>Sizes</h3>
+  <div class="row">
+    <button class="btn btn-default" style="height:24px;font-size:11px;padding:0 8px">xs</button>
+    <button class="btn btn-default" style="height:28px;font-size:12.5px">sm</button>
+    <button class="btn btn-default">default</button>
+    <button class="btn btn-default" style="height:36px">lg</button>
+  </div>
+
+  <h2>Badges</h2>
+  <div class="row">
+    <span class="badge badge-default">Default</span>
+    <span class="badge badge-secondary">Secondary</span>
+    <span class="badge badge-destructive">Destructive</span>
+    <span class="badge badge-outline">Outline</span>
+  </div>
+
+  <h2>Card</h2>
+  <div class="grid cols-3">
+    <div class="card"><h4>Task #4821</h4><p>Queued · member role</p></div>
+    <div class="card"><h4>Account pool</h4><p>12 active, 2 cooling down</p></div>
+    <div class="card"><h4>Library asset</h4><p>Generated 2026-10-24</p></div>
+  </div>
+
+  <h2>Form fields</h2>
+  <div style="max-width:320px">
+    <label class="field-label">Username</label>
+    <input class="input" placeholder="duy@team" />
+  </div>
+
+  <h2>Tabs</h2>
+  <div class="tabs">
+    <div class="tab active">Chat</div>
+    <div class="tab">Playground</div>
+    <div class="tab">Tasks</div>
+  </div>
+
+  <h2>Table</h2>
+  <table>
+    <thead><tr><th>Account</th><th>Role</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>duy</td><td>admin</td><td><span class="badge badge-default">active</span></td></tr>
+      <tr><td>intern1</td><td>member</td><td><span class="badge badge-secondary">cooling</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2>App shell (sidebar nav)</h2>
+  <div class="sidebar-demo">
+    <aside>
+      <div style="font-weight:600;margin-bottom:10px">Muse2API Studio</div>
+      <div class="item active">Chat Muse</div>
+      <div class="item">Tạo ảnh / video</div>
+      <div class="item">Tác vụ</div>
+      <div class="item">Thư viện</div>
+    </aside>
+    <main>Page content area · <code>p-6</code> padding</main>
+  </div>
+</div>
+</body>
+</html>
