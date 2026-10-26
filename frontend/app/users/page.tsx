@@ -95,11 +95,11 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="space-y-4 max-w-3xl">
+    <div className="space-y-4">
       <h1 className="text-xl font-semibold">Người dùng</h1>
 
       {canManage && (
-        <Card>
+        <Card className="max-w-3xl">
           <CardHeader><CardTitle className="text-base">Thêm user</CardTitle></CardHeader>
           <CardContent>
             <form onSubmit={onCreate} className="flex gap-3 items-end flex-wrap">
