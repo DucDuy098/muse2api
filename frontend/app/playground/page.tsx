@@ -19,6 +19,21 @@ import type { Account } from "@/lib/types";
 
 const IMAGE_SIZES = ["1:1", "16:9", "9:16", "4:3", "3:4"];
 const VIDEO_SIZES = ["16:9", "9:16", "1:1"];
+const MAX_REFERENCE_IMAGES = 8;
+
+function filesToDataUrls(files: FileList): Promise<string[]> {
+  return Promise.all(
+    Array.from(files).map(
+      (file) =>
+        new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        })
+    )
+  );
+}
 
 export default function PlaygroundPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -27,6 +42,7 @@ export default function PlaygroundPage() {
   const [size, setSize] = useState("16:9");
   const [duration, setDuration] = useState(10);
   const [prompt, setPrompt] = useState("");
+  const [referenceImages, setReferenceImages] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [taskId, setTaskId] = useState<string | null>(null);
 
@@ -48,9 +64,12 @@ export default function PlaygroundPage() {
         account_id: accountId === "auto" ? null : accountId,
       };
       if (kind === "video") body.duration = duration;
+      if (referenceImages.length === 1) body.reference_image = referenceImages[0];
+      else if (referenceImages.length > 1) body.reference_images = referenceImages;
       const path = kind === "image" ? "/admin/generate/image" : "/admin/generate/video";
       const data = await api.post<{ id: string }>(path, body);
       setTaskId(data.id);
+      setReferenceImages([]);
       toast.success("Đã gửi tác vụ " + data.id);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Gửi tác vụ thất bại");
@@ -119,6 +138,41 @@ export default function PlaygroundPage() {
               <Label>Mô tả</Label>
               <Textarea rows={6} value={prompt} onChange={(e) => setPrompt(e.target.value)}
                 placeholder="Mô tả ảnh/video cần tạo..." />
+            </div>
+            <div className="space-y-2">
+              <Label>Ảnh tham khảo (tùy chọn, tối đa {MAX_REFERENCE_IMAGES})</Label>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                disabled={referenceImages.length >= MAX_REFERENCE_IMAGES}
+                onChange={async (e) => {
+                  const files = e.target.files;
+                  if (!files || files.length === 0) return;
+                  const room = MAX_REFERENCE_IMAGES - referenceImages.length;
+                  const urls = await filesToDataUrls(files as unknown as FileList);
+                  setReferenceImages((prev) => [...prev, ...urls.slice(0, room)]);
+                  e.target.value = "";
+                }}
+                className="text-sm"
+              />
+              {referenceImages.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {referenceImages.map((src, i) => (
+                    <div key={i} className="relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={src} alt="" className="h-16 w-16 object-cover rounded border border-border" />
+                      <button
+                        type="button"
+                        onClick={() => setReferenceImages((prev) => prev.filter((_, j) => j !== i))}
+                        className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full w-4 h-4 text-xs leading-none"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <Button type="submit" disabled={submitting || !prompt.trim()}>
               {submitting ? "Đang gửi..." : "Tạo ảnh / video"}
