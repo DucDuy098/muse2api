@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import type { MediaItem } from "@/lib/types";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 function fmtBytes(n: number): string {
   if (n < 1024 * 1024) return (n / 1024).toFixed(0) + " KB";
@@ -13,6 +14,7 @@ function fmtBytes(n: number): string {
 export default function LibraryPage() {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [preview, setPreview] = useState<MediaItem | null>(null);
 
   useEffect(() => {
     api.get<{ media: MediaItem[] }>("/admin/media")
@@ -31,7 +33,11 @@ export default function LibraryPage() {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-4">
           {items.map((item) => (
-            <div key={item.name} className="rounded border border-border overflow-hidden">
+            <div
+              key={item.name}
+              className="rounded border border-border overflow-hidden cursor-pointer"
+              onClick={() => setPreview(item)}
+            >
               {item.kind === "image" ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={api.base + item.url} alt={item.prompt ?? item.name} className="aspect-video object-cover w-full" />
@@ -49,6 +55,17 @@ export default function LibraryPage() {
           ))}
         </div>
       )}
+      <Dialog open={!!preview} onOpenChange={(open) => !open && setPreview(null)}>
+        <DialogContent className="sm:max-w-3xl" showCloseButton>
+          <DialogTitle className="sr-only">{preview?.prompt || preview?.name}</DialogTitle>
+          {preview?.kind === "image" ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={api.base + preview.url} alt={preview.prompt ?? preview.name} className="w-full max-h-[75vh] object-contain" />
+          ) : preview ? (
+            <video src={api.base + preview.url} className="w-full max-h-[75vh]" controls autoPlay />
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
