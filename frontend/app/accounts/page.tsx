@@ -88,6 +88,7 @@ export default function AccountsPage() {
               <TableHead>Trạng thái</TableHead>
               <TableHead>Hết hạn</TableHead>
               <TableHead>Cookie</TableHead>
+              <TableHead>Quota</TableHead>
               <TableHead>Dùng gần nhất</TableHead>
               <TableHead>Ghi chú</TableHead>
               {canWrite && <TableHead className="text-right">Thao tác</TableHead>}
@@ -95,9 +96,9 @@ export default function AccountsPage() {
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Đang tải...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">Đang tải...</TableCell></TableRow>
             ) : accounts.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Chưa có tài khoản nào.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">Chưa có tài khoản nào.</TableCell></TableRow>
             ) : (
               accounts.map((a) => (
                 <TableRow key={a.id}>
@@ -111,6 +112,16 @@ export default function AccountsPage() {
                   </TableCell>
                   <TableCell className="text-sm">{fmtTime(a.expires_at)}</TableCell>
                   <TableCell className="text-sm">{a.cookie_count}</TableCell>
+                  <TableCell className="text-sm whitespace-nowrap">
+                    {a.quota ? (
+                      <div className="space-y-0.5">
+                        <div>{a.quota.plan || "—"} · {a.quota.weekly_used_pct ?? 0}% tuần</div>
+                        {a.quota.extra_left && <div className="text-muted-foreground">{a.quota.extra_left}</div>}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">Chưa kiểm tra</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-sm">{fmtTime(a.last_used)}</TableCell>
                   <TableCell className="text-sm text-muted-foreground max-w-50 truncate" title={a.note}>{a.note || "—"}</TableCell>
                   {canWrite && (
@@ -118,6 +129,10 @@ export default function AccountsPage() {
                       <Button size="sm" variant="outline" disabled={busy === a.id}
                         onClick={() => run(a.id, () => api.post(`/admin/accounts/${a.id}/test`), "Kiểm tra")}>
                         Kiểm tra
+                      </Button>
+                      <Button size="sm" variant="outline" disabled={busy === a.id}
+                        onClick={() => run(a.id, () => api.post(`/admin/accounts/${a.id}/quota`), "Kiểm tra quota")}>
+                        Quota
                       </Button>
                       <Button size="sm" variant="outline" disabled={busy === a.id}
                         onClick={() => run(a.id, () => api.post(`/admin/accounts/${a.id}/relogin`), "Làm mới")}>

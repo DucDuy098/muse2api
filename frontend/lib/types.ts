@@ -20,6 +20,9 @@ export interface Account {
     weekly_reset?: string;
     weekly_used_pct?: number;
     extra_left?: string;
+    extra_used_pct?: number;
+    extra_expires?: string;
+    checked_at?: number;
   };
 }
 
